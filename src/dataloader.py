@@ -83,7 +83,6 @@ def load_gaussian_noise(num_samples=10000, image_shape=(3, 32, 32), batch_size=1
     print(f"Gaussian Noise dataset: {num_samples} samples")
     return dataloader
 
-
 if __name__ == "__main__":
     print("=" * 50)
     print("Testing Data Loaders")

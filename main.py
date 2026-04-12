@@ -183,6 +183,5 @@ def main():
     print(f"     └── temperature_analysis_noise.png     (Temperature vs FPR95 - Noise)")
     print()
 
-
 if __name__ == "__main__":
     main()

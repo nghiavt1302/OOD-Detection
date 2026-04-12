@@ -3,7 +3,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.metrics import roc_auc_score, precision_recall_curve, auc, roc_curve
 
-
 def compute_threshold(id_scores, percentile=5):
     threshold = np.percentile(id_scores, percentile)
     print(f"Threshold = {threshold:.4f} (percentile={percentile})")
@@ -138,7 +137,6 @@ def plot_temperature_analysis(temperatures, fpr95_values, save_path=None):
         print(f"Saved chart: {save_path}")
 
     plt.close()
-
 
 def save_results_to_file(all_results, save_path="./results/metrics.txt"):
     os.makedirs(os.path.dirname(save_path), exist_ok=True)

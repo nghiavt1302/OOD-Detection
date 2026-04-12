@@ -2,9 +2,7 @@ import numpy as np
 from .ood_detector import compute_energy_score
 from .evaluator import compute_fpr_at_tpr95, plot_temperature_analysis
 
-
 TEMPERATURES = [0.5, 1.0, 2.0, 10.0, 100.0]
-
 
 def run_temperature_experiment(id_logits, ood_logits, temperatures=None,
                                ood_name="SVHN", save_dir="./results"):
