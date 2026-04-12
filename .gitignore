@@ -1,0 +1,38 @@
+# Data & checkpoints
+data/
+*.pth
+
+# Results (auto-generated)
+results/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environment
+venv/
+env/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Project docs
+agenda.md
+README.md
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Jupyter
+.ipynb_checkpoints/
