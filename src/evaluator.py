@@ -136,6 +136,53 @@ def plot_temperature_analysis(temperatures, fpr95_values, save_path=None):
 
     plt.close()
 
+
+def plot_activation_distribution(id_features, ood_features, ood_name="OOD",
+                                 threshold_c=None, save_path=None):
+    """Plot the distribution of maximum penultimate-layer activations.
+
+    For each sample we take the max activation value across the feature
+    dimension.  This reveals the "long-tail" phenomenon where OOD inputs
+    (especially textures like DTD) produce anomalously high activations.
+
+    Args:
+        id_features:  np.ndarray (N_id,  D) — penultimate features for ID data.
+        ood_features: np.ndarray (N_ood, D) — penultimate features for OOD data.
+        ood_name:     Display name for the OOD dataset.
+        threshold_c:  If given, draw a vertical line showing the ReAct clip value.
+        save_path:    File path to save the figure.
+    """
+    id_max = np.max(id_features, axis=1)
+    ood_max = np.max(ood_features, axis=1)
+
+    fig, ax = plt.subplots(figsize=(10, 6))
+
+    ax.hist(id_max, bins=120, alpha=0.6, color="#2196F3", label="CIFAR-10 (ID)",
+            density=True, edgecolor="white", linewidth=0.5)
+    ax.hist(ood_max, bins=120, alpha=0.6, color="#FF5722", label=f"{ood_name} (OOD)",
+            density=True, edgecolor="white", linewidth=0.5)
+
+    if threshold_c is not None:
+        ax.axvline(x=threshold_c, color="#4CAF50", linestyle="--", linewidth=2.5,
+                   label=f"ReAct threshold c = {threshold_c:.2f}")
+
+    ax.set_xlabel("Max Activation Value", fontsize=13)
+    ax.set_ylabel("Density", fontsize=13)
+    ax.set_title(f"Penultimate-Layer Max Activation: CIFAR-10 vs {ood_name}",
+                 fontsize=14, fontweight="bold")
+    ax.legend(fontsize=11, loc="upper right")
+    ax.grid(True, alpha=0.3)
+
+    plt.tight_layout()
+
+    if save_path:
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        plt.savefig(save_path, dpi=150, bbox_inches="tight")
+        print(f"  Saved chart: {save_path}")
+
+    plt.close()
+
+
 def save_results_to_file(all_results, save_path="./results/metrics.txt"):
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
 

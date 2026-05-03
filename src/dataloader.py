@@ -83,6 +83,39 @@ def load_gaussian_noise(num_samples=10000, image_shape=(3, 32, 32), batch_size=1
     print(f"Gaussian Noise dataset: {num_samples} samples")
     return dataloader
 
+
+def load_dtd(data_dir="./data", batch_size=128):
+    """Load the Describable Textures Dataset (DTD) as an OOD benchmark.
+
+    DTD images are high-resolution texture patches that trigger anomalous
+    high activations in CIFAR-trained models, making it a challenging OOD
+    dataset for demonstrating the value of ReAct.
+    """
+    dtd_transform = transforms.Compose([
+        transforms.Resize(36),
+        transforms.CenterCrop(32),
+        transforms.ToTensor(),
+        transforms.Normalize(CIFAR10_MEAN, CIFAR10_STD),
+    ])
+
+    dataset = torchvision.datasets.DTD(
+        root=data_dir,
+        split="test",
+        download=True,
+        transform=dtd_transform,
+    )
+
+    dataloader = DataLoader(
+        dataset,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=2,
+        pin_memory=True,
+    )
+
+    print(f"DTD test set: {len(dataset)} samples")
+    return dataloader
+
 if __name__ == "__main__":
     print("=" * 50)
     print("Testing Data Loaders")
