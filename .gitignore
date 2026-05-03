@@ -29,6 +29,7 @@ env/
 # Project docs
 agenda.md
 README.md
+step*.py
 
 # OS
 .DS_Store

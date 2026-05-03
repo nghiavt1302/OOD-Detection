@@ -1,14 +1,12 @@
 import os
 import torch
 import torch.nn as nn
-import torchvision.models as models
+
+from src.resnet_cifar import resnet20
 
 
-def _build_resnet18_cifar10():
-    model = models.resnet18(weights=None, num_classes=10)
-    model.conv1 = nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1, bias=False)
-    model.maxpool = nn.Identity()
-    return model
+def _build_resnet20_cifar10():
+    return resnet20(num_classes=10)
 
 
 def load_pretrained_model(checkpoint_path=None, device=None):
@@ -17,34 +15,36 @@ def load_pretrained_model(checkpoint_path=None, device=None):
 
     print(f"Device: {device}")
 
+    # Nếu có truyền vào đường dẫn và file tồn tại trên máy -> Load model cục bộ
     if checkpoint_path and os.path.exists(checkpoint_path):
-        print(f"Loading checkpoint from: {checkpoint_path}")
-        model = _build_resnet18_cifar10()
+        print(f"Loading local checkpoint from: {checkpoint_path}")
+        model = _build_resnet20_cifar10()
         state_dict = torch.load(checkpoint_path, map_location=device)
         if isinstance(state_dict, dict) and "model_state_dict" in state_dict:
             state_dict = state_dict["model_state_dict"]
         model.load_state_dict(state_dict)
+    
+    # NẾU KHÔNG CÓ FILE TRONG MÁY -> Tự động tải mô hình chuẩn từ PyTorch Hub
     else:
-        print("No checkpoint found. Using pretrained ImageNet weights.")
-        print("For best results, train or use a CIFAR-10 checkpoint.")
-        model = models.resnet18(weights=models.ResNet18_Weights.IMAGENET1K_V1)
-        model.conv1 = nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1, bias=False)
-        model.maxpool = nn.Identity()
-        model.fc = nn.Linear(model.fc.in_features, 10)
+        print("No local checkpoint found. Downloading Pretrained CIFAR-10 ResNet-20 from PyTorch Hub...")
+        # Dòng này sẽ tải cả cấu trúc mạng và trọng số đã được train đạt độ chính xác cao trên CIFAR-10
+        model = torch.hub.load("chenyaofo/pytorch-cifar-models", "cifar10_resnet20", pretrained=True)
 
+    # Chuyển model vào thiết bị (CPU/GPU) và bật chế độ đánh giá
     model = model.to(device)
     model.eval()
 
+    # Khóa gradient để tiết kiệm RAM và tăng tốc độ tính toán
     for param in model.parameters():
         param.requires_grad = False
 
     total_params = sum(p.numel() for p in model.parameters())
-    print(f"Loaded ResNet-18 ({total_params:,} parameters) - eval mode, gradients frozen")
+    print(f"Loaded Pre-trained ResNet-20 ({total_params:,} parameters) - eval mode, gradients frozen")
 
     return model, device
 
 
-def train_cifar10_model(data_dir="./data", save_path="./data/resnet18_cifar10.pth",
+def train_cifar10_model(data_dir="./data", save_path="./data/resnet20_cifar10.pth",
                         epochs=50, lr=0.1, device=None):
     import torchvision
     import torchvision.transforms as transforms
@@ -76,14 +76,14 @@ def train_cifar10_model(data_dir="./data", save_path="./data/resnet18_cifar10.pt
     train_loader = DataLoader(train_dataset, batch_size=128, shuffle=True, num_workers=2)
     test_loader = DataLoader(test_dataset, batch_size=128, shuffle=False, num_workers=2)
 
-    model = _build_resnet18_cifar10().to(device)
+    model = _build_resnet20_cifar10().to(device)
 
     criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.SGD(model.parameters(), lr=lr, momentum=0.9, weight_decay=5e-4)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
 
     best_acc = 0.0
-    print(f"Training ResNet-18 on CIFAR-10 ({epochs} epochs)...")
+    print(f"Training ResNet-20 on CIFAR-10 ({epochs} epochs)...")
 
     for epoch in range(epochs):
         model.train()

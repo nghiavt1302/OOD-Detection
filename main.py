@@ -22,8 +22,8 @@ def parse_args():
     )
     parser.add_argument("--train", action="store_true",
                         help="Train model before OOD detection")
-    parser.add_argument("--checkpoint", type=str, default="./data/resnet18_cifar10.pth",
-                        help="Checkpoint path (default: ./data/resnet18_cifar10.pth)")
+    parser.add_argument("--checkpoint", type=str, default="./data/resnet20_cifar10.pth",
+                        help="Checkpoint path (default: ./data/resnet20_cifar10.pth)")
     parser.add_argument("--data-dir", type=str, default="./data",
                         help="Data directory (default: ./data)")
     parser.add_argument("--results-dir", type=str, default="./results",
@@ -59,7 +59,7 @@ def main():
 
     print("\n[Step 1.2] Loading model...")
     if args.train:
-        print("Training ResNet-18 on CIFAR-10...")
+        print("Training ResNet-20 on CIFAR-10...")
         train_cifar10_model(
             data_dir=args.data_dir,
             save_path=args.checkpoint,
