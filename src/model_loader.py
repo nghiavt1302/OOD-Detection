@@ -9,28 +9,47 @@ def _build_resnet20_cifar10():
     return resnet20(num_classes=10)
 
 
-def load_pretrained_model(checkpoint_path=None, device=None):
-    if device is None:
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+def load_pretrained_model(checkpoint_path=None, device=None, model_name="resnet20"):
+    """Load a pretrained CIFAR-10 model.
 
-    print(f"Device: {device}")
+    Args:
+        checkpoint_path: Optional path to a local checkpoint file.
+        device: Target device (auto-detected if None).
+        model_name: Model architecture name. Supports "resnet20" and "resnet56".
+
+    Returns:
+        Tuple of (model, device).
+    """
+    supported_models = ["resnet20", "resnet56"]
+    if model_name not in supported_models:
+        raise ValueError(f"Unsupported model_name='{model_name}'. Choose from {supported_models}")
+
+    if device is None:
+        if torch.cuda.is_available():
+            device = torch.device("cuda")
+        elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+            device = torch.device("mps")
+        else:
+            device = torch.device("cpu")
+
+    print(f"  Device: {device}")
 
     # Nếu có truyền vào đường dẫn và file tồn tại trên máy -> Load model cục bộ
     if checkpoint_path and os.path.exists(checkpoint_path):
-        print(f"Loading local checkpoint from: {checkpoint_path}")
+        print(f"  Loading local checkpoint from: {checkpoint_path}")
         model = _build_resnet20_cifar10()
         state_dict = torch.load(checkpoint_path, map_location=device)
         if isinstance(state_dict, dict) and "model_state_dict" in state_dict:
             state_dict = state_dict["model_state_dict"]
         model.load_state_dict(state_dict)
-    
+
     # NẾU KHÔNG CÓ FILE TRONG MÁY -> Tự động tải mô hình chuẩn từ PyTorch Hub
     else:
-        print("No local checkpoint found. Downloading Pretrained CIFAR-10 ResNet-20 from PyTorch Hub...")
-        # Dòng này sẽ tải cả cấu trúc mạng và trọng số đã được train đạt độ chính xác cao trên CIFAR-10
-        model = torch.hub.load("chenyaofo/pytorch-cifar-models", "cifar10_resnet20", pretrained=True)
+        hub_model_name = f"cifar10_{model_name}"
+        print(f"  Downloading pretrained {hub_model_name} from PyTorch Hub...")
+        model = torch.hub.load("chenyaofo/pytorch-cifar-models", hub_model_name, pretrained=True)
 
-    # Chuyển model vào thiết bị (CPU/GPU) và bật chế độ đánh giá
+    # Chuyển model vào thiết bị (CPU/GPU/MPS) và bật chế độ đánh giá
     model = model.to(device)
     model.eval()
 
@@ -39,7 +58,7 @@ def load_pretrained_model(checkpoint_path=None, device=None):
         param.requires_grad = False
 
     total_params = sum(p.numel() for p in model.parameters())
-    print(f"Loaded Pre-trained ResNet-20 ({total_params:,} parameters) - eval mode, gradients frozen")
+    print(f"  Loaded pretrained {model_name} ({total_params:,} params) — eval mode, gradients frozen")
 
     return model, device
 
