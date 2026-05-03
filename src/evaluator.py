@@ -90,8 +90,6 @@ def plot_score_histogram(id_scores, ood_scores, score_type="Energy",
     ax.legend(fontsize=11, loc="upper right")
     ax.grid(True, alpha=0.3)
 
-    plt.tight_layout()
-
     if save_path:
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         plt.savefig(save_path, dpi=150, bbox_inches="tight")
