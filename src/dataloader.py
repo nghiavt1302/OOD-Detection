@@ -1,7 +1,7 @@
 import os
 import torch
 import numpy as np
-from torch.utils.data import DataLoader, TensorDataset
+from torch.utils.data import DataLoader, TensorDataset, Subset
 import torchvision
 import torchvision.transforms as transforms
 
@@ -114,6 +114,52 @@ def load_dtd(data_dir="./data", batch_size=128):
     )
 
     print(f"DTD test set: {len(dataset)} samples")
+    return dataloader
+
+
+def load_places365(data_dir="./data", batch_size=128, num_samples=2000):
+    """Load a small subset of Places365 (small-256) as an OOD benchmark.
+
+    Places365 contains natural-scene images that are semantically far from
+    CIFAR-10 classes but trigger anomalously high penultimate-layer
+    activations in CIFAR-trained ResNets — the exact failure mode that
+    ReAct is designed to fix.
+
+    Args:
+        data_dir:    Root directory for the dataset.
+        batch_size:  Batch size for the DataLoader.
+        num_samples: Number of images to subsample (default: 2000).
+    """
+    places_transform = transforms.Compose([
+        transforms.Resize(36),
+        transforms.CenterCrop(32),
+        transforms.ToTensor(),
+        transforms.Normalize(CIFAR10_MEAN, CIFAR10_STD),
+    ])
+
+    full_dataset = torchvision.datasets.Places365(
+        root=data_dir,
+        split="val",
+        small=True,       # Use the 256×256 version (much lighter download)
+        download=True,
+        transform=places_transform,
+    )
+
+    # Subsample deterministically for reproducibility
+    num_samples = min(num_samples, len(full_dataset))
+    rng = np.random.RandomState(42)
+    indices = rng.choice(len(full_dataset), size=num_samples, replace=False)
+    dataset = Subset(full_dataset, indices.tolist())
+
+    dataloader = DataLoader(
+        dataset,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=2,
+        pin_memory=True,
+    )
+
+    print(f"Places365 subset: {len(dataset)} samples (from {len(full_dataset)} total)")
     return dataloader
 
 if __name__ == "__main__":

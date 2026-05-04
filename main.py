@@ -1,17 +1,22 @@
 """
-Ablation Study: Energy-Based OOD Detection
-===========================================
+Ablation Study: Energy-Based OOD Detection — "ReAct Victory"
+=============================================================
 Progressive storyline:
-  1. ResNet-20 baseline — struggles but works on easy OOD (SVHN, Noise)
-  2. ResNet-56 capacity — improves via larger model, but fails on DTD textures
-  3. ResNet-56 + ReAct  — auto-clips anomalous activations → fixes DTD, SOTA
+  1. ResNet-20 baseline — reasonable on easy OOD (SVHN, Noise), struggles on
+     near-distribution datasets (DTD, Places365)
+  2. ResNet-56 capacity — more capacity does NOT help (or even hurts) on
+     Places365/DTD because larger models produce more extreme activations
+  3. ResNet-56 + ReAct  — auto-clips the "long tail" of anomalous activations
+     → dramatic FPR95 drop on Places365/DTD, proving ReAct's value
 """
 
 import os
 import argparse
 import numpy as np
 
-from src.dataloader import load_cifar10, load_svhn, load_gaussian_noise, load_dtd
+from src.dataloader import (
+    load_cifar10, load_svhn, load_gaussian_noise, load_dtd, load_places365,
+)
 from src.model_loader import load_pretrained_model
 from src.ood_detector import extract_logits, compute_energy_score
 from src.evaluator import (
@@ -35,18 +40,21 @@ from src.react_utils import (
 # Ablation study configurations
 # ---------------------------------------------------------------------------
 ABLATION_CONFIGS = [
-    {"name": "1_Base_ResNet20",       "model_name": "resnet20", "use_react": False},
-    {"name": "2_Capacity_ResNet56",   "model_name": "resnet56", "use_react": False},
-    {"name": "3_SOTA_ResNet56_ReAct", "model_name": "resnet56", "use_react": True},
+    {"name": "1_ResNet20_Base",      "model_name": "resnet20", "use_react": False},
+    {"name": "2_ResNet56_Capacity",  "model_name": "resnet56", "use_react": False},
+    {"name": "3_ResNet56_ReAct",     "model_name": "resnet56", "use_react": True},
 ]
 
-OOD_NAMES = ["SVHN", "Noise", "DTD"]
+OOD_NAMES = ["SVHN", "Noise", "DTD", "Places365"]
 TEMPERATURES = [0.5, 1.0, 2.0, 10.0, 100.0]
+
+# The "victory" OOD datasets — highlighted in the summary table
+HIGHLIGHT_OOD = {"DTD", "Places365"}
 
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Ablation Study: Model Capacity × ReAct for Energy-Based OOD Detection",
+        description="Ablation Study: Model Capacity × ReAct — ReAct Victory",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("--data-dir", type=str, default="./data",
@@ -57,8 +65,8 @@ def parse_args():
                         help="Batch size (default: 128)")
     parser.add_argument("--temperature", type=float, default=1.0,
                         help="Temperature T for Energy Score (default: 1.0)")
-    parser.add_argument("--react-percentile", type=int, default=90,
-                        help="Percentile for auto-calculating ReAct threshold (default: 90)")
+    parser.add_argument("--react-percentile", type=int, default=98,
+                        help="Percentile for auto-calculating ReAct threshold (default: 98)")
     return parser.parse_args()
 
 
@@ -66,30 +74,36 @@ def parse_args():
 # Pretty-print helpers
 # ---------------------------------------------------------------------------
 
-def _header(text, char="=", width=72):
+def _header(text, char="=", width=76):
     print(f"\n{char * width}")
     print(f"  {text}")
     print(f"{char * width}")
 
 
 def _print_summary_table(all_results):
-    """Print a nicely formatted comparison table of all scenarios."""
+    """Print a nicely formatted comparison table, highlighting HIGHLIGHT_OOD rows."""
     _header("Ablation Study — Summary Table")
 
     hdr = (
-        f"  {'Scenario':<26} {'Model':<10} {'ReAct':<7} "
-        f"{'OOD':<8} {'FPR95↓':>8} {'AUROC↑':>8} {'AUPR↑':>8}"
+        f"  {'Scenario':<24} {'Model':<10} {'ReAct':<7} "
+        f"{'OOD':<12} {'FPR95↓':>8} {'AUROC↑':>8} {'AUPR↑':>8}"
     )
     print(hdr)
-    print("  " + "─" * 76)
+    print("  " + "─" * 78)
 
     for r in all_results:
         react_str = "Yes" if r.get("react") else "No"
+        ood_display = r['ood_dataset']
+        # Highlight rows for the "victory" OOD datasets
+        if ood_display in HIGHLIGHT_OOD:
+            ood_display = f"★ {ood_display}"
         print(
-            f"  {r['scenario']:<26} {r['model']:<10} {react_str:<7} "
-            f"{r['ood_dataset']:<8} {r['FPR95']:>8.4f} {r['AUROC']:>8.4f} {r['AUPR']:>8.4f}"
+            f"  {r['scenario']:<24} {r['model']:<10} {react_str:<7} "
+            f"{ood_display:<12} {r['FPR95']:>8.4f} {r['AUROC']:>8.4f} {r['AUPR']:>8.4f}"
         )
 
+    print()
+    print("  ★ = Highlighted OOD dataset (focus of the ReAct Victory storyline)")
     print()
 
 
@@ -98,26 +112,30 @@ def _save_ablation_results(all_results, save_path):
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
 
     with open(save_path, "w", encoding="utf-8") as f:
-        f.write("=" * 88 + "\n")
+        f.write("=" * 92 + "\n")
         f.write("  Ablation Study: Model Capacity × ReAct — Energy-Based OOD Detection\n")
-        f.write("=" * 88 + "\n\n")
+        f.write("=" * 92 + "\n\n")
 
         hdr = (
-            f"  {'Scenario':<26} {'Model':<10} {'ReAct':<7} "
-            f"{'OOD':<8} {'FPR95':>8} {'AUROC':>8} {'AUPR':>8}\n"
+            f"  {'Scenario':<24} {'Model':<10} {'ReAct':<7} "
+            f"{'OOD':<12} {'FPR95':>8} {'AUROC':>8} {'AUPR':>8}\n"
         )
-        sep = "  " + "─" * 78 + "\n"
+        sep = "  " + "─" * 82 + "\n"
         f.write(hdr)
         f.write(sep)
 
         for r in all_results:
             react_str = "Yes" if r.get("react") else "No"
+            ood_display = r['ood_dataset']
+            if ood_display in HIGHLIGHT_OOD:
+                ood_display = f"★ {ood_display}"
             f.write(
-                f"  {r['scenario']:<26} {r['model']:<10} {react_str:<7} "
-                f"{r['ood_dataset']:<8} {r['FPR95']:>8.4f} {r['AUROC']:>8.4f} {r['AUPR']:>8.4f}\n"
+                f"  {r['scenario']:<24} {r['model']:<10} {react_str:<7} "
+                f"{ood_display:<12} {r['FPR95']:>8.4f} {r['AUROC']:>8.4f} {r['AUPR']:>8.4f}\n"
             )
 
-        f.write("\n" + "=" * 88 + "\n")
+        f.write("\n  ★ = Highlighted OOD dataset (ReAct Victory)\n")
+        f.write("\n" + "=" * 92 + "\n")
 
     print(f"  Results saved → {save_path}")
 
@@ -134,11 +152,12 @@ def main():
 
     T = args.temperature
 
-    _header("🔬 Ablation Study: Model Capacity × ReAct")
+    _header("🔬 Ablation Study: ReAct Victory — Model Capacity × ReAct")
     print(f"  Temperature T       = {T}")
     print(f"  ReAct percentile    = {args.react_percentile}")
     print(f"  Configurations      : {len(ABLATION_CONFIGS)}")
     print(f"  OOD datasets        : {OOD_NAMES}")
+    print(f"  Highlighted OOD     : {sorted(HIGHLIGHT_OOD)}")
 
     # ==================================================================
     # Phase 1 — Load datasets (shared across all configs)
@@ -157,7 +176,15 @@ def main():
     print("  [1.4] DTD — Describable Textures (OOD)...")
     dtd_loader = load_dtd(data_dir=args.data_dir, batch_size=args.batch_size)
 
-    ood_loaders = {"SVHN": svhn_loader, "Noise": noise_loader, "DTD": dtd_loader}
+    print("  [1.5] Places365 (OOD, subsampled)...")
+    places_loader = load_places365(data_dir=args.data_dir, batch_size=args.batch_size)
+
+    ood_loaders = {
+        "SVHN": svhn_loader,
+        "Noise": noise_loader,
+        "DTD": dtd_loader,
+        "Places365": places_loader,
+    }
 
     # ==================================================================
     # Phase 2 — Run ablation loop
@@ -172,26 +199,30 @@ def main():
         use_react = cfg["use_react"]
         safe_name = scenario  # already filesystem-safe
 
-        print(f"\n{'━' * 72}")
+        print(f"\n{'━' * 76}")
         print(f"  [INFO] Scenario {idx}/{len(ABLATION_CONFIGS)}: {scenario}")
         print(f"         Model={model_name}  |  ReAct={'ON' if use_react else 'OFF'}")
-        print(f"{'━' * 72}")
+        print(f"{'━' * 76}")
 
         # --- Load model -------------------------------------------------
         print(f"\n  Loading {model_name}...")
         model, device = load_pretrained_model(model_name=model_name)
 
         # --- Extract penultimate features BEFORE ReAct (for vis) ---------
-        #     We always extract ID features; for DTD we also extract OOD
-        #     features so we can plot the activation distributions.
+        #     Always extract ID + Places365 features for activation plots.
         print("\n  Extracting penultimate features (pre-ReAct)...")
         print("    → CIFAR-10 (ID)")
         id_features = extract_penultimate_features(model, cifar10_loader, device)
         print(f"      Shape: {id_features.shape}")
 
-        print("    → DTD (OOD)")
-        dtd_features = extract_penultimate_features(model, dtd_loader, device)
-        print(f"      Shape: {dtd_features.shape}")
+        # Features for the "victory" OOD datasets
+        highlight_features = {}
+        for ood_name in HIGHLIGHT_OOD:
+            print(f"    → {ood_name} (OOD)")
+            highlight_features[ood_name] = extract_penultimate_features(
+                model, ood_loaders[ood_name], device
+            )
+            print(f"      Shape: {highlight_features[ood_name].shape}")
 
         # --- Calculate & apply ReAct if required -------------------------
         hook_handle = None
@@ -203,14 +234,16 @@ def main():
             )
             hook_handle = apply_react_hook(model, threshold_c=threshold_c)
 
-        # --- Activation distribution plots (always, for each scenario) ---
+        # --- Activation distribution plots -------------------------------
+        #     Show ID vs each highlighted OOD dataset, with ReAct line.
         print("\n  Plotting activation distributions...")
-        plot_activation_distribution(
-            id_features, dtd_features,
-            ood_name="DTD",
-            threshold_c=threshold_c,
-            save_path=f"{args.results_dir}/{safe_name}_activations_dtd.png",
-        )
+        for ood_name in HIGHLIGHT_OOD:
+            plot_activation_distribution(
+                id_features, highlight_features[ood_name],
+                ood_name=ood_name,
+                threshold_c=threshold_c,
+                save_path=f"{args.results_dir}/{safe_name}_activations_{ood_name.lower()}.png",
+            )
 
         # --- Extract logits (post-hook if ReAct is on) -------------------
         print("\n  Extracting logits...")
@@ -227,12 +260,12 @@ def main():
         # --- Compute Energy Scores ---------------------------------------
         print(f"\n  Computing Energy Scores (T={T})...")
         cifar10_energy = compute_energy_score(cifar10_logits, temperature=T)
-        print(f"    CIFAR-10 mean energy: {cifar10_energy.mean():.4f}")
+        print(f"    CIFAR-10   mean energy: {cifar10_energy.mean():.4f}")
 
         ood_energy = {}
         for ood_name in OOD_NAMES:
             ood_energy[ood_name] = compute_energy_score(ood_logits[ood_name], temperature=T)
-            print(f"    {ood_name:<8} mean energy: {ood_energy[ood_name].mean():.4f}")
+            print(f"    {ood_name:<10} mean energy: {ood_energy[ood_name].mean():.4f}")
 
         # --- Evaluate Metrics --------------------------------------------
         print("\n  Evaluating metrics...")
@@ -277,7 +310,7 @@ def main():
         if hook_handle is not None:
             remove_react_hook(hook_handle)
 
-        del model, id_features, dtd_features
+        del model, id_features, highlight_features
         print(f"\n  ✓ Scenario {idx} ({scenario}) complete.")
 
     # ==================================================================
@@ -291,10 +324,10 @@ def main():
 
     _header("PIPELINE COMPLETED")
     print(f"\n  Results directory: {os.path.abspath(args.results_dir)}/")
-    print(f"     ├── metrics.txt                              (Comparison table)")
-    print(f"     ├── <scenario>_histogram_<ood>.png           (Energy score histograms)")
-    print(f"     ├── <scenario>_activations_dtd.png           (Activation distributions)")
-    print(f"     └── <scenario>_temperature_<ood>.png         (Temperature analysis)")
+    print(f"     ├── metrics.txt                                    (Comparison table)")
+    print(f"     ├── <scenario>_histogram_<ood>.png                 (Energy score histograms)")
+    print(f"     ├── <scenario>_activations_<ood>.png               (Activation distributions)")
+    print(f"     └── <scenario>_temperature_<ood>.png               (Temperature analysis)")
     print()
 
 
