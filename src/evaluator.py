@@ -3,9 +3,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.metrics import roc_auc_score, precision_recall_curve, auc, roc_curve
 
-def compute_threshold(id_scores, percentile=5):
+def compute_threshold(id_scores, percentile=5, verbose=True):
     threshold = np.percentile(id_scores, percentile)
-    print(f"Threshold = {threshold:.4f} (percentile={percentile})")
+    if verbose:
+        print(f"Threshold = {threshold:.4f} (percentile={percentile})")
     return threshold
 
 
@@ -45,7 +46,7 @@ def compute_aupr(id_scores, ood_scores):
     return auc(recall, precision)
 
 
-def evaluate_ood(id_scores, ood_scores, method_name="", ood_name=""):
+def evaluate_ood(id_scores, ood_scores, method_name="", ood_name="", verbose=True):
     fpr95 = compute_fpr_at_tpr95(id_scores, ood_scores)
     auroc = compute_auroc(id_scores, ood_scores)
     aupr = compute_aupr(id_scores, ood_scores)
@@ -58,14 +59,15 @@ def evaluate_ood(id_scores, ood_scores, method_name="", ood_name=""):
         "AUPR": aupr,
     }
 
-    label = f"[{method_name}] CIFAR-10 vs {ood_name}" if method_name and ood_name else "Results"
-    print(f"\n{'='*55}")
-    print(f"  {label}")
-    print(f"{'='*55}")
-    print(f"  FPR@95:  {fpr95:.4f}  (thấp hơn = tốt hơn)")
-    print(f"  AUROC:   {auroc:.4f}  (cao hơn = tốt hơn)")
-    print(f"  AUPR:    {aupr:.4f}  (cao hơn = tốt hơn)")
-    print(f"{'='*55}")
+    if verbose:
+        label = f"[{method_name}] CIFAR-10 vs {ood_name}" if method_name and ood_name else "Results"
+        print(f"\n{'='*55}")
+        print(f"  {label}")
+        print(f"{'='*55}")
+        print(f"  FPR@95:  {fpr95:.4f}  (thấp hơn = tốt hơn)")
+        print(f"  AUROC:   {auroc:.4f}  (cao hơn = tốt hơn)")
+        print(f"  AUPR:    {aupr:.4f}  (cao hơn = tốt hơn)")
+        print(f"{'='*55}")
 
     return results
 

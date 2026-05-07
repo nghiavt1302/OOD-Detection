@@ -14,7 +14,7 @@ from src.dataloader import (
     load_lsun,
 )
 from src.model_loader import load_pretrained_model
-from src.ood_detector import extract_logits, compute_energy_score
+from src.ood_detector import extract_logits, compute_energy_score, compute_softmax_score
 from src.evaluator import (
     compute_fpr_at_tpr95,
     compute_threshold,
@@ -64,15 +64,15 @@ def _print_summary_table(all_results):
     _header("Architecture Ablation — Summary Table")
 
     hdr = (
-        f"  {'Scenario':<24} {'Model':<14} "
-        f"{'OOD':<12} {'FPR95↓':>8} {'AUROC↑':>8} {'AUPR↑':>8}"
+        f"  {'Scenario':<24} {'Model':<14} {'Method':<10} "
+        f"{'OOD Dataset':<12} {'FPR95↓':>8} {'AUROC↑':>8} {'AUPR↑':>8}"
     )
     print(hdr)
-    print("  " + "─" * 74)
+    print("  " + "─" * 86)
 
     for r in all_results:
         print(
-            f"  {r['scenario']:<24} {r['model']:<14} "
+            f"  {r['scenario']:<24} {r['model']:<14} {r['method']:<10} "
             f"{r['ood_dataset']:<12} {r['FPR95']:>8.4f} {r['AUROC']:>8.4f} {r['AUPR']:>8.4f}"
         )
     print()
@@ -83,24 +83,24 @@ def _save_summary_table(all_results, save_path):
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
 
     with open(save_path, "w", encoding="utf-8") as f:
-        f.write("=" * 92 + "\n")
-        f.write("  Architecture-Driven Ablation Study — Energy-Based OOD Detection\n")
-        f.write("=" * 92 + "\n\n")
+        f.write("=" * 96 + "\n")
+        f.write("  Architecture-Driven Ablation Study — Energy vs Softmax OOD Detection\n")
+        f.write("=" * 96 + "\n\n")
 
         hdr = (
-            f"  {'Scenario':<24} {'Model':<14} "
-            f"{'OOD':<12} {'FPR95':>8} {'AUROC':>8} {'AUPR':>8}\n"
+            f"  {'Scenario':<24} {'Model':<14} {'Method':<10} "
+            f"{'OOD Dataset':<12} {'FPR95↓':>8} {'AUROC↑':>8} {'AUPR↑':>8}\n"
         )
         f.write(hdr)
-        f.write("  " + "─" * 80 + "\n")
+        f.write("  " + "─" * 86 + "\n")
 
         for r in all_results:
             f.write(
-                f"  {r['scenario']:<24} {r['model']:<14} "
+                f"  {r['scenario']:<24} {r['model']:<14} {r['method']:<10} "
                 f"{r['ood_dataset']:<12} {r['FPR95']:>8.4f} {r['AUROC']:>8.4f} {r['AUPR']:>8.4f}\n"
             )
 
-        f.write("\n" + "=" * 92 + "\n")
+        f.write("\n" + "=" * 96 + "\n")
 
     print(f"  📄 Summary saved → {save_path}")
 
@@ -199,42 +199,72 @@ def main():
             ood_logits[ood_name] = extract_logits(model, ood_loaders[ood_name], device)
             print(f"      Shape: {ood_logits[ood_name].shape}")
 
-        # --- Compute Energy Scores ----------------------------------------
-        print(f"\n  Computing Energy Scores (T={T})...")
+        # --- Compute Scores (Energy and Softmax) --------------------------
+        print(f"\n  Computing Scores (T={T})...")
         cifar10_energy = compute_energy_score(cifar10_logits, temperature=T)
-        print(f"    CIFAR-10   mean energy: {cifar10_energy.mean():.4f}")
+        cifar10_msp = compute_softmax_score(cifar10_logits)
+        print(f"    CIFAR-10   mean energy: {cifar10_energy.mean():.4f} | mean MSP: {cifar10_msp.mean():.4f}")
 
         ood_energy = {}
+        ood_msp = {}
         for ood_name in active_ood:
             ood_energy[ood_name] = compute_energy_score(ood_logits[ood_name], temperature=T)
-            print(f"    {ood_name:<10} mean energy: {ood_energy[ood_name].mean():.4f}")
+            ood_msp[ood_name] = compute_softmax_score(ood_logits[ood_name])
+            print(f"    {ood_name:<10} mean energy: {ood_energy[ood_name].mean():.4f} | mean MSP: {ood_msp[ood_name].mean():.4f}")
 
         # --- Evaluate Metrics ---------------------------------------------
         print("\n  Evaluating metrics...")
         for ood_name in active_ood:
-            result = evaluate_ood(
-                cifar10_energy, ood_energy[ood_name],
-                method_name=f"Energy ({scenario})",
+            # Softmax
+            res_softmax = evaluate_ood(
+                cifar10_msp, ood_msp[ood_name],
+                method_name="Softmax",
                 ood_name=ood_name,
+                verbose=False
             )
-            result["scenario"] = scenario
-            result["model"]    = model_name
-            all_results.append(result)
+            res_softmax["scenario"] = scenario
+            res_softmax["model"]    = model_name
+            all_results.append(res_softmax)
+
+            # Energy
+            res_energy = evaluate_ood(
+                cifar10_energy, ood_energy[ood_name],
+                method_name="Energy",
+                ood_name=ood_name,
+                verbose=False
+            )
+            res_energy["scenario"] = scenario
+            res_energy["model"]    = model_name
+            all_results.append(res_energy)
 
         # --- Histograms ---------------------------------------------------
-        tau = compute_threshold(cifar10_energy, percentile=5)
+        tau_energy = compute_threshold(cifar10_energy, percentile=5, verbose=False)
+        tau_softmax = compute_threshold(cifar10_msp, percentile=5, verbose=False)
 
-        print("\n  Plotting energy histograms...")
+        print("\n  Plotting score histograms...")
         for ood_name in active_ood:
-            save_path = os.path.join(
+            # Softmax Histogram
+            save_path_softmax = os.path.join(
                 args.results_dir,
-                f"{scenario}_histogram_{ood_name}.png",
+                f"{scenario}_Softmax_histogram_{ood_name}.png",
+            )
+            plot_score_histogram(
+                cifar10_msp, ood_msp[ood_name],
+                score_type="Softmax Confidence", ood_name=ood_name,
+                save_path=save_path_softmax,
+                threshold=tau_softmax,
+            )
+
+            # Energy Histogram
+            save_path_energy = os.path.join(
+                args.results_dir,
+                f"{scenario}_Energy_histogram_{ood_name}.png",
             )
             plot_score_histogram(
                 cifar10_energy, ood_energy[ood_name],
                 score_type="Energy", ood_name=ood_name,
-                save_path=save_path,
-                threshold=tau,
+                save_path=save_path_energy,
+                threshold=tau_energy,
             )
 
         # --- Cleanup ------------------------------------------------------
