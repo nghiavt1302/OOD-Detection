@@ -149,7 +149,7 @@ def plot_activation_distribution(id_features, ood_features, ood_name="OOD",
         id_features:  np.ndarray (N_id,  D) — penultimate features for ID data.
         ood_features: np.ndarray (N_ood, D) — penultimate features for OOD data.
         ood_name:     Display name for the OOD dataset.
-        threshold_c:  If given, draw a vertical line showing the ReAct clip value.
+        threshold_c:  If given, draw a vertical line showing the clip threshold.
         save_path:    File path to save the figure.
     """
     id_max = np.max(id_features, axis=1)
@@ -164,7 +164,7 @@ def plot_activation_distribution(id_features, ood_features, ood_name="OOD",
 
     if threshold_c is not None:
         ax.axvline(x=threshold_c, color="#4CAF50", linestyle="--", linewidth=2.5,
-                   label=f"ReAct threshold c = {threshold_c:.2f}")
+                   label=f"Threshold c = {threshold_c:.2f}")
 
     ax.set_xlabel("Max Activation Value", fontsize=13)
     ax.set_ylabel("Density", fontsize=13)
