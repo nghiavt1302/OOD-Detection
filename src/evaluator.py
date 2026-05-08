@@ -131,7 +131,9 @@ def plot_temperature_analysis(temperatures, fpr95_values, save_path=None):
         idx = temperatures.index(1.0)
         ax.annotate(f"T=1 (optimal)\nFPR95={fpr95_values[idx]:.4f}",
                     xy=(1.0, fpr95_values[idx]),
-                    xytext=(2.5, fpr95_values[idx] + 0.03),
+                    textcoords="offset points",
+                    xytext=(0, 45),  # Đẩy lên 45 pixels theo chiều dọc, giữ nguyên chiều ngang
+                    ha="center",     # Căn giữa box text với đầu mũi tên
                     arrowprops=dict(arrowstyle="->", color="#333", lw=1.5),
                     fontsize=11, fontweight="bold",
                     bbox=dict(boxstyle="round,pad=0.3",
